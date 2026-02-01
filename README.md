@@ -15,52 +15,77 @@ This extension replaces the need for external hex editors or command-line tools 
 | Feature | Description |
 |---------|-------------|
 | Visual Editor | Two-column table with editable Key and Value fields |
+| Pagination | Shows 20 entries per page for fast loading of large files |
 | Unique Key Validation | Real-time duplicate detection with error highlighting |
 | Search & Filter | Filter entries by key or value text |
 | Add/Delete Rows | Toolbar buttons and keyboard shortcuts |
-| Auto-resize | Value cells expand automatically for multi-line content |
 | Undo/Redo | Full integration with VS Code's edit history |
 | Theme Support | Automatically matches your VS Code color theme |
 
 ## Installation
 
-### From Source
+### Prerequisites
 
-1. Clone the repository:
-   ```bash
-   git clone git@github.com:monkjames/vsCode-sft-editor.git
-   cd vsCode-sft-editor
-   ```
+- **Node.js 16+** (check with `node --version`)
+- **VS Code 1.74+**
 
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
+### Step 1: Clone and Build
 
-3. Compile TypeScript:
-   ```bash
-   npm run compile
-   ```
+```bash
+git clone https://github.com/monkjames/vsCode-sft-editor.git
+cd vsCode-sft-editor
+npm install
+npm run compile
+```
 
-4. Install in VS Code (choose one method):
+### Step 2: Install the Extension
 
-   **Method A - Development Mode:**
-   - Open the extension folder in VS Code
-   - Press `F5` to launch Extension Development Host
-   - Open any `.stf` file to test
+Choose the method based on your setup:
 
-   **Method B - Package and Install:**
-   ```bash
-   npm install -g @vscode/vsce
-   vsce package
-   ```
-   Then in VS Code: `Extensions` → `...` menu → `Install from VSIX...` → select the generated `.vsix` file
+---
 
-### From VSIX (Pre-built)
+#### Local Development (VS Code on your machine)
 
-1. Download the `.vsix` file from Releases
-2. In VS Code: `Extensions` → `...` menu → `Install from VSIX...`
-3. Select the downloaded file
+Copy to your VS Code extensions folder:
+
+```bash
+# Linux/macOS
+mkdir -p ~/.vscode/extensions/swgemu.stf-editor-1.0.0
+cp package.json ~/.vscode/extensions/swgemu.stf-editor-1.0.0/
+cp -r out ~/.vscode/extensions/swgemu.stf-editor-1.0.0/
+
+# Windows (PowerShell)
+mkdir "$env:USERPROFILE\.vscode\extensions\swgemu.stf-editor-1.0.0"
+copy package.json "$env:USERPROFILE\.vscode\extensions\swgemu.stf-editor-1.0.0\"
+xcopy out "$env:USERPROFILE\.vscode\extensions\swgemu.stf-editor-1.0.0\out\" /E
+```
+
+Then restart VS Code.
+
+---
+
+#### Remote SSH Development (VS Code connecting to a server)
+
+If you're using VS Code's **Remote - SSH** extension to connect to a Linux server, extensions need to be installed on the server side:
+
+```bash
+# On the remote server
+mkdir -p ~/.vscode-server/extensions/swgemu.stf-editor-1.0.0
+cp package.json ~/.vscode-server/extensions/swgemu.stf-editor-1.0.0/
+cp -r out ~/.vscode-server/extensions/swgemu.stf-editor-1.0.0/
+```
+
+Then in VS Code, press `Ctrl+Shift+P` and run **"Reload Window"**.
+
+---
+
+#### Development/Testing Mode
+
+To test changes without installing:
+
+1. Open the `vsCode-sft-editor` folder in VS Code
+2. Press `F5` to launch the Extension Development Host
+3. In the new window, open any `.stf` file
 
 ## Usage
 
@@ -71,23 +96,26 @@ Simply open any `.stf` file in VS Code. The extension automatically activates an
 ### Editing Entries
 
 - **Edit Key**: Click on any key cell and type. Keys must be unique - duplicates are highlighted in red.
-- **Edit Value**: Click on any value cell and type. Cells auto-expand for multi-line content.
+- **Edit Value**: Click on any value cell and type.
 
-### Toolbar Actions
+### Toolbar
 
-| Button | Action |
-|--------|--------|
-| **+ Add** | Adds a new entry at the bottom with a unique default key |
-| **Delete** | Removes the currently selected row |
-| **Search box** | Filters visible entries by key or value |
+| Control | Action |
+|---------|--------|
+| **+ Add** | Adds a new entry at the end |
+| **Delete** | Removes the selected row |
+| **Search box** | Filters entries by key or value |
+| **« ‹ › »** | Page navigation (20 entries per page) |
 
 ### Keyboard Shortcuts
 
 | Shortcut | Action |
 |----------|--------|
+| `Ctrl+S` | Save file |
 | `Ctrl+N` | Add new entry |
 | `Ctrl+Delete` | Delete selected entry |
-| `Ctrl+S` | Save file |
+| `Alt+Left` | Previous page |
+| `Alt+Right` | Next page |
 | `Ctrl+Z` | Undo |
 | `Ctrl+Shift+Z` | Redo |
 
@@ -122,19 +150,20 @@ ID Section (repeated NumStrings times):
   - ID: IDLen bytes (ASCII)
 ```
 
-## Development
-
-### Project Structure
+## Project Structure
 
 ```
-vscode-stf-editor/
+vsCode-sft-editor/
 ├── src/
 │   ├── extension.ts         # Extension entry point
 │   ├── stfEditorProvider.ts # Custom editor + webview UI
 │   └── stfParser.ts         # Binary STF parser/serializer
+├── out/                     # Compiled JavaScript (after npm run compile)
 ├── package.json             # Extension manifest
 └── tsconfig.json            # TypeScript configuration
 ```
+
+## Development
 
 ### Building
 
@@ -148,6 +177,18 @@ npm run watch      # Watch mode for development
 1. Open the extension folder in VS Code
 2. Press `F5` to launch the Extension Development Host
 3. Set breakpoints in the TypeScript source files
+
+## Troubleshooting
+
+**Extension not appearing?**
+- Make sure you copied both `package.json` and the `out/` folder
+- Folder name must be exactly `swgemu.stf-editor-1.0.0`
+- For Remote SSH, use `~/.vscode-server/extensions/` not `~/.vscode/extensions/`
+- Reload the VS Code window after installing
+
+**Build errors?**
+- Ensure Node.js 16+ is installed: `node --version`
+- Delete `node_modules` and run `npm install` again
 
 ## License
 

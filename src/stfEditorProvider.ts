@@ -132,6 +132,7 @@ export class STFEditorProvider implements vscode.CustomEditorProvider<STFDocumen
             padding: 8px;
             background: var(--vscode-toolbar-background);
             border-radius: 4px;
+            flex-wrap: wrap;
         }
 
         .toolbar button {
@@ -155,6 +156,7 @@ export class STFEditorProvider implements vscode.CustomEditorProvider<STFDocumen
 
         .search-box {
             flex: 1;
+            min-width: 150px;
             padding: 6px 10px;
             background: var(--vscode-input-background);
             color: var(--vscode-input-foreground);
@@ -173,9 +175,26 @@ export class STFEditorProvider implements vscode.CustomEditorProvider<STFDocumen
             font-size: 12px;
         }
 
+        .pagination {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .pagination button {
+            padding: 4px 8px;
+            min-width: 32px;
+        }
+
+        .page-info {
+            padding: 0 8px;
+            font-size: 12px;
+            color: var(--vscode-descriptionForeground);
+        }
+
         .table-container {
             overflow: auto;
-            max-height: calc(100vh - 100px);
+            max-height: calc(100vh - 120px);
             border: 1px solid var(--vscode-panel-border);
             border-radius: 4px;
         }
@@ -197,12 +216,16 @@ export class STFEditorProvider implements vscode.CustomEditorProvider<STFDocumen
             z-index: 1;
         }
 
-        th:first-child {
+        th.row-header {
+            width: 60px;
+        }
+
+        th.key-col {
             width: 30%;
         }
 
-        th:last-child {
-            width: 70%;
+        th.value-col {
+            width: calc(70% - 60px);
         }
 
         td {
@@ -259,16 +282,12 @@ export class STFEditorProvider implements vscode.CustomEditorProvider<STFDocumen
         }
 
         .row-number {
-            width: 50px;
+            width: 60px;
             text-align: right;
             padding: 8px 8px 8px 12px;
             color: var(--vscode-editorLineNumber-foreground);
             font-size: 12px;
             user-select: none;
-        }
-
-        th.row-header {
-            width: 50px;
         }
 
         .hidden {
@@ -281,6 +300,13 @@ export class STFEditorProvider implements vscode.CustomEditorProvider<STFDocumen
         <button id="addBtn" title="Add new entry">+ Add</button>
         <button id="deleteBtn" title="Delete selected entry" disabled>Delete</button>
         <input type="text" class="search-box" id="searchBox" placeholder="Search keys or values...">
+        <div class="pagination">
+            <button id="firstBtn" title="First page">&laquo;</button>
+            <button id="prevBtn" title="Previous page">&lsaquo;</button>
+            <span class="page-info" id="pageInfo">1 / 1</span>
+            <button id="nextBtn" title="Next page">&rsaquo;</button>
+            <button id="lastBtn" title="Last page">&raquo;</button>
+        </div>
         <span class="stats" id="stats"></span>
     </div>
 
@@ -291,8 +317,8 @@ export class STFEditorProvider implements vscode.CustomEditorProvider<STFDocumen
             <thead>
                 <tr>
                     <th class="row-header">#</th>
-                    <th>Key (ID)</th>
-                    <th>Value (String)</th>
+                    <th class="key-col">Key (ID)</th>
+                    <th class="value-col">Value (String)</th>
                 </tr>
             </thead>
             <tbody id="tableBody">
@@ -303,7 +329,10 @@ export class STFEditorProvider implements vscode.CustomEditorProvider<STFDocumen
     <script>
         const vscode = acquireVsCodeApi();
 
+        const PAGE_SIZE = 20;
         let entries = [];
+        let filteredIndices = [];
+        let currentPage = 0;
         let selectedRow = -1;
         let usedIds = new Set();
 
@@ -313,6 +342,11 @@ export class STFEditorProvider implements vscode.CustomEditorProvider<STFDocumen
         const searchBox = document.getElementById('searchBox');
         const errorMessage = document.getElementById('errorMessage');
         const stats = document.getElementById('stats');
+        const pageInfo = document.getElementById('pageInfo');
+        const firstBtn = document.getElementById('firstBtn');
+        const prevBtn = document.getElementById('prevBtn');
+        const nextBtn = document.getElementById('nextBtn');
+        const lastBtn = document.getElementById('lastBtn');
 
         // Handle messages from extension
         window.addEventListener('message', event => {
@@ -320,37 +354,55 @@ export class STFEditorProvider implements vscode.CustomEditorProvider<STFDocumen
             switch (message.type) {
                 case 'load':
                     entries = message.data.entries || [];
-                    rebuildTable();
+                    currentPage = 0;
+                    applyFilter();
                     break;
             }
         });
 
-        function rebuildTable() {
+        function applyFilter() {
             usedIds = new Set(entries.map(e => e.id));
             const searchTerm = searchBox.value.toLowerCase();
 
-            tableBody.innerHTML = '';
-
-            let visibleCount = 0;
+            filteredIndices = [];
             entries.forEach((entry, index) => {
                 const matchesSearch = !searchTerm ||
                     entry.id.toLowerCase().includes(searchTerm) ||
                     entry.value.toLowerCase().includes(searchTerm);
+                if (matchesSearch) {
+                    filteredIndices.push(index);
+                }
+            });
 
-                if (!matchesSearch) return;
-                visibleCount++;
+            // Reset to first page when filter changes
+            currentPage = 0;
+            renderPage();
+        }
 
+        function renderPage() {
+            tableBody.innerHTML = '';
+
+            const totalPages = Math.max(1, Math.ceil(filteredIndices.length / PAGE_SIZE));
+            if (currentPage >= totalPages) currentPage = totalPages - 1;
+            if (currentPage < 0) currentPage = 0;
+
+            const startIdx = currentPage * PAGE_SIZE;
+            const endIdx = Math.min(startIdx + PAGE_SIZE, filteredIndices.length);
+            const pageIndices = filteredIndices.slice(startIdx, endIdx);
+
+            pageIndices.forEach((entryIndex) => {
+                const entry = entries[entryIndex];
                 const tr = document.createElement('tr');
-                tr.dataset.index = index;
+                tr.dataset.index = entryIndex;
 
-                if (index === selectedRow) {
+                if (entryIndex === selectedRow) {
                     tr.classList.add('selected');
                 }
 
                 // Row number
                 const tdNum = document.createElement('td');
                 tdNum.className = 'row-number';
-                tdNum.textContent = (index + 1).toString();
+                tdNum.textContent = (entryIndex + 1).toString();
                 tr.appendChild(tdNum);
 
                 // ID column
@@ -359,10 +411,10 @@ export class STFEditorProvider implements vscode.CustomEditorProvider<STFDocumen
                 inputId.type = 'text';
                 inputId.className = 'cell-input id-col';
                 inputId.value = entry.id;
-                inputId.dataset.index = index;
+                inputId.dataset.index = entryIndex;
                 inputId.dataset.field = 'id';
                 inputId.addEventListener('input', handleCellEdit);
-                inputId.addEventListener('focus', () => selectRow(index));
+                inputId.addEventListener('focus', () => selectRow(entryIndex));
                 tdId.appendChild(inputId);
                 tr.appendChild(tdId);
 
@@ -372,22 +424,31 @@ export class STFEditorProvider implements vscode.CustomEditorProvider<STFDocumen
                 inputValue.className = 'cell-input';
                 inputValue.value = entry.value;
                 inputValue.rows = 1;
-                inputValue.dataset.index = index;
+                inputValue.dataset.index = entryIndex;
                 inputValue.dataset.field = 'value';
                 inputValue.addEventListener('input', handleCellEdit);
-                inputValue.addEventListener('focus', () => selectRow(index));
+                inputValue.addEventListener('focus', () => selectRow(entryIndex));
                 inputValue.addEventListener('input', autoResizeTextarea);
                 tdValue.appendChild(inputValue);
                 tr.appendChild(tdValue);
 
-                tr.addEventListener('click', () => selectRow(index));
+                tr.addEventListener('click', () => selectRow(entryIndex));
                 tableBody.appendChild(tr);
 
                 // Auto-resize textarea on load
                 autoResizeTextarea({ target: inputValue });
             });
 
-            updateStats(visibleCount);
+            updatePagination(totalPages);
+            updateStats();
+        }
+
+        function updatePagination(totalPages) {
+            pageInfo.textContent = (currentPage + 1) + ' / ' + totalPages;
+            firstBtn.disabled = currentPage === 0;
+            prevBtn.disabled = currentPage === 0;
+            nextBtn.disabled = currentPage >= totalPages - 1;
+            lastBtn.disabled = currentPage >= totalPages - 1;
         }
 
         function autoResizeTextarea(e) {
@@ -402,7 +463,6 @@ export class STFEditorProvider implements vscode.CustomEditorProvider<STFDocumen
             const newValue = e.target.value;
 
             if (field === 'id') {
-                // Check for duplicate keys
                 const isDuplicate = entries.some((entry, i) =>
                     i !== index && entry.id === newValue
                 );
@@ -445,12 +505,14 @@ export class STFEditorProvider implements vscode.CustomEditorProvider<STFDocumen
             errorMessage.classList.remove('visible');
         }
 
-        function updateStats(visible) {
+        function updateStats() {
+            const showing = Math.min(PAGE_SIZE, filteredIndices.length - currentPage * PAGE_SIZE);
+            const filtered = filteredIndices.length;
             const total = entries.length;
-            if (visible === total) {
+            if (filtered === total) {
                 stats.textContent = total + ' entries';
             } else {
-                stats.textContent = visible + ' of ' + total + ' entries';
+                stats.textContent = filtered + ' of ' + total + ' matched';
             }
         }
 
@@ -460,6 +522,15 @@ export class STFEditorProvider implements vscode.CustomEditorProvider<STFDocumen
                 entries: entries
             });
         }
+
+        // Pagination controls
+        firstBtn.addEventListener('click', () => { currentPage = 0; renderPage(); });
+        prevBtn.addEventListener('click', () => { currentPage--; renderPage(); });
+        nextBtn.addEventListener('click', () => { currentPage++; renderPage(); });
+        lastBtn.addEventListener('click', () => {
+            currentPage = Math.ceil(filteredIndices.length / PAGE_SIZE) - 1;
+            renderPage();
+        });
 
         // Add new entry
         addBtn.addEventListener('click', () => {
@@ -471,7 +542,11 @@ export class STFEditorProvider implements vscode.CustomEditorProvider<STFDocumen
             }
 
             entries.push({ id: newId, value: '' });
-            rebuildTable();
+            // Go to last page to see new entry
+            searchBox.value = '';
+            applyFilter();
+            currentPage = Math.ceil(filteredIndices.length / PAGE_SIZE) - 1;
+            renderPage();
             notifyChange();
 
             // Focus the new row's ID field
@@ -490,14 +565,14 @@ export class STFEditorProvider implements vscode.CustomEditorProvider<STFDocumen
                 entries.splice(selectedRow, 1);
                 selectedRow = -1;
                 deleteBtn.disabled = true;
-                rebuildTable();
+                applyFilter();
                 notifyChange();
             }
         });
 
         // Search
         searchBox.addEventListener('input', () => {
-            rebuildTable();
+            applyFilter();
         });
 
         // Keyboard shortcuts
@@ -508,6 +583,15 @@ export class STFEditorProvider implements vscode.CustomEditorProvider<STFDocumen
             if (e.key === 'n' && e.ctrlKey) {
                 e.preventDefault();
                 addBtn.click();
+            }
+            // Page navigation
+            if (e.key === 'ArrowLeft' && e.altKey) {
+                e.preventDefault();
+                if (!prevBtn.disabled) prevBtn.click();
+            }
+            if (e.key === 'ArrowRight' && e.altKey) {
+                e.preventDefault();
+                if (!nextBtn.disabled) nextBtn.click();
             }
         });
 
